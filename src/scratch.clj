@@ -1,15 +1,159 @@
+;;;
+					;Destructuring
+;;;
+				
+
+(defn greet-author1 [author]
+  (println "Hello," (:first-name author)))
+
+(greet-author1 {:last-name "Vinge" :first-name "Vernor"})
+
+;;;;;;;;;;;;;;;
+;use of a map to destructure an associative coll
+
+(defn greet-author2 [{fname :first-name}]
+  (println "Hello," fname))
+
+(greet-author2
+ {:last-name "Vinge"
+  :first-name "Verner"})
+
+;use a vector to destructure a sequential coll
+
+(let [[x y] [6 7 83]]
+  [x y])
+
+(let [[_ _ z] [1 2 3]]
+  z)
+
+(let [[x y :as coords]
+      [1 2 3 4 5 6]]
+  (str " x: " x
+       " y: " y
+       " total dimensions "
+       (count coords)))
+
+(use
+ '[clojure.contrib.str-utils :only
+   (re-split str-join)])
+
+(defn ellipsize [words]
+  (let [[w1 w2 w3] (re-split #"\s+" words)]
+    (str-join " " [w1 w2 w3 "..."])))
+
+(ellipsize "The quick brown fox jumps over the lazy dog")
+
+;;; 
+;;;namespace
+;;;
+
+(def foo 10)
+(resolve 'foo)
+(in-ns 'myapp)
+String
 
 
+;
+;
+while learning clojure use clojure.core ns when you move to new ns
+;;; 
 
+(clojure.core/use 'clojure.core)
+(import '(java.io InputStream File))
+File/separator
 
-("hello, world!")
+(require 'clojure.contrib.math)
+(clojure.contrib.math/round 1.7)
+(round 1.7) ;error
+(use 'clojure.contrib.math) ;add :only x
+(use '[ clojure.contrib.math
+       :only (round)])
 
+(round 1.6)
+
+(use :reload '[ clojure.contrib.math
+	       :only (round)])
+
+;;; branch with if
+
+(defn is-small? [number]
+  (if (< number 100) "yea"))
+
+(is-small? 50)
+
+(defn is-small? [number]
+  (if (< number 100) "yea" "nope"))
+
+(is-small? 500000)
+
+(defn is-small? [number]
+  (if (< number 100)
+    "yea"
+    (do      ;do says -side effect to follow
+      (println "saw a big number" number)
+      "nope")))
+
+(is-small? 200)
+
+(is-small? 99)
+
+;;; loop /recur
+
+;first loop binds result to [] and x to 5
+;x is not zero so- recur rebinds x and result
+;result binds to prev result/conj wth prev x
+;x binds to dec on prev x
+
+(loop [result [] x 5]
+  (if (zero? x)
+    result
+    (recur (conj result x) (dec x)))) 
+
+(conj [5 4 3 2] 1)
+
+(defn countdown [result x]
+  (if (zero? x)
+    result
+    (recur (conj result x)
+	   (dec x))))
+
+(countdown [] 10)
+
+;do the same with seqs
+
+(into [] (take 10 (iterate dec 10)))
+(into [] (drop-last (reverse (range 11))))
+(vec (reverse (rest (range 11))))
+
+;;; no loops sold here
+
+(defn indexed [coll] (map vector (iterate inc 0)
+			  coll))
+
+(indexed "abcdefg")
+
+(defn index-filter [pred coll]
+  (when pred
+    (for [[idx elt] (indexed coll) :when (pred elt)] idx)))
+
+(index-filter #{\a \b} "abcdbbb")
+
+;;; we only need the first match -so we can...
+
+(defn first-index-match [pred coll]
+  (first (index-filter pred coll)))
+
+(first-index-match #{\z \a} "yycdazzzaaa")
+
+;;;
+;;; 
 ;;; M-; with paredit
+;;;
+	  
 
+      (def x 5)
 
-(def x 5)
-
-(def lst '(a b c))
+      (def lst '(a b c)))))
 (first lst)
 (rest lst)
 
@@ -45,7 +189,7 @@ Knows if you have been here before."
      (do
        (alter visitors conj username)
        (str "Hello, " username))))))
-
+(doc hello)
 ;; Test
 (hello "Rick")
 (hello "Rick")
@@ -399,7 +543,7 @@ MessageFormat
 ((loop [result [] x 5 ]
    (if (zero? x)
      result
-     (recur (conj result x) (dec x))))
+     (recur (conj result x) (dec x)))))
 
 					
 (merge-with
@@ -438,11 +582,15 @@ MessageFormat
 
 (def client (connect {:host "127.0.0.1", :port 3400}))
 
+
+
 (client ["ping"])
 
 
 
 (client ["insert" "accounts" {"id" 1, "owner" "Eve", "credits" 100}])
+
+
 
 
 (client ["insert" "accounts"
@@ -465,6 +613,154 @@ MessageFormat
 (client ["update" "accounts" {"credits" 55} {"where" ["=" "owner" "Bob"]}])
 
 
+
+
+;;; concurrency
+
+;;; vars
+
+(def foo {})
+foo
+
+(def foo {:name "Craig" :age 38})
+
+(defn print-foo
+  ([] (print-foo ""))
+  ([prefix] (println prefix foo)))
+
+(binding [foo 3] (print-foo))
+
+;;java interop
+
+(import [java.lang Thread])
+(defn with-new-thread [f]
+  (.start (Thread. f)))
+
+(with-new-thread (fn [] (print-foo "new thread"))) ;does not compute /only returns nil
+
+(do
+  (binding [foo "keith"]
+    (with-new-thread
+      (fn [] (print-foo "background:")))
+    (print-foo "foreground1:"))
+  (print-foo "foreground2:"))  ;only prints forground1 and 2 not background ????
+
+					;references
+
+					;atoms/agents/refs
+
+(def foo (atom {:blah "this"}))
+
+(swap! foo (fn [old] 3))
+(swap! foo inc)
+
+(pmap
+ (fn [_] (swap! foo inc))
+ (range 10000))
+
+;;;;;;;;;;;;;;;;;
+
+(def bar (atom 0))
+(def call-counter (atom 0))
+(import [java.lang Thread])
+
+(defn slow-inc-with-call-count [x]
+  (swap! call-counter inc)
+  (Thread/sleep 100)
+  (inc x))
+
+(pmap
+ (fn [_]
+   (swap! bar slow-inc-with-call-count))
+ (range 100))
+
+@bar            ;; value 100
+@call-counter   ;;called 1600+ times
+
+;;agents/
+
+(def my-agent
+     (agent
+      {:name "craig-andera"
+       :favorites []}))
+
+(defn slow-append-favorite
+  [val new-fav]
+  (Thread/sleep 2000)
+  (assoc val
+    :favorites
+    (conj (:favorites val) new-fav)))
+
+(do
+  (send my-agent slow-append-favorite "food")
+  (send my-agent slow-append-favorite "music")
+  (println @my-agent)
+  (Thread/sleep 2500)
+  (println my-agent)
+  (Thread/sleep 2500)
+  (println @my-agent))
+
+;;; agent errors
+
+(def erroring-agent (agent 3))
+
+(defn modify-agent-with-error
+  "Modifies and agent with error on 42"
+  [current new]
+  (if (= 42 new)
+    (throw (Exception. "NOT 42"))
+    new))
+
+(send erroring-agent
+	    modify-agent-with-error 17)
+
+(send erroring-agent
+      modify-agent-with-error 42)
+
+(agent-errors erroring-agent)
+
+@erroring-agent
+
+(clear-agent-errors erroring-agent)
+
+;;; refs with STM mvcc    with -  commute/alter
+
+(def foo (ref {:first "Craig" :last "Andrea" :children 2}))
+
+(assoc @foo :blog "http://pluralsight.com/craig")
+
+(dosync 
+ (commute foo assoc :blog "http://pluralsight.com/craig"))
+
+@foo
+
+;;; macros
+
+(defmacro with-new-thread [& body]
+  `(.start (Thread. (fn [] ~@body))))
+
+(macroexpand-1
+ '(with-new-thread (print-foo)))
+
+;;;;; refs
+
+(def r (ref 0))
+
+(with-new-thread
+  (dosync
+   (println "tx1 initial" @r)
+   (alter r inc)
+   (println "tx1 final" @r)
+   (Thread/sleep 5000)
+   (println "tx1 done")))
+
+(with-new-thread
+  (dosync
+   (println "tx2 initial" @r)
+   (Thread/sleep 1000)
+   (alter r inc)
+   (println "tx2 final" @r)
+   (println "tx2 done")))
 
 
 
